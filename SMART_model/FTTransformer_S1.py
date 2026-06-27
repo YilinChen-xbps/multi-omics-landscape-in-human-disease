@@ -12,7 +12,7 @@ PyTorch implementation: https://github.com/lucidrains/tab-transformer-pytorch
 import torch
 import torch.nn.functional as F
 from torch import nn, einsum
-
+from rtdl_num_embeddings import PeriodicEmbeddings
 from einops import rearrange, repeat
 from typing import Literal,Optional
 
@@ -144,15 +144,13 @@ class Transformer(nn.Module):
         return x, torch.stack(post_softmax_attns)
 
 
-class NumericalEmbedder(nn.Module):
+class PLRNumericalTokenizer(nn.Module):
     def __init__(self, dim, num_numerical_types):
         super().__init__()
-        self.weights = nn.Parameter(torch.randn(num_numerical_types, dim)) 
-        self.biases = nn.Parameter(torch.randn(num_numerical_types, dim)) 
-
+        self.embed = PeriodicEmbeddings(n_features=num_numerical_types, d_embedding=dim, n_frequencies= 48, frequency_init_scale = 0.01, activation=True, lite=True)
+    
     def forward(self, x):
-        x = rearrange(x, 'b n -> b n 1')
-        return x * self.weights + self.biases
+        return self.embed(x)
 
 
 class FTTransformer(nn.Module):
@@ -178,8 +176,8 @@ class FTTransformer(nn.Module):
         self.num_continuous = num_continuous
 
         if self.num_continuous > 0:
-            self.numerical_embedder = NumericalEmbedder(dim, self.num_continuous)
-
+            self.numerical_embedder = PLRNumericalTokenizer(dim, self.num_continuous)
+            
         self.cls_token = nn.Parameter(torch.randn(1, 1, dim))
 
         self.transformer = Transformer(
